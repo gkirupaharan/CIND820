@@ -3,7 +3,7 @@
 !pip install seaborn
 !pip install scikit-learn
 
-#Answering Research Question No.1:	What are the most significant risk factors for predicting the likelihood of developing diabetes?
+#Answering Research Question No.1:What are the most significant risk factors for predicting the likelihood of developing diabetes?
 # From the dataset, the first column, “Diabetes_012”, depicts the following:
 #0 = Not diabetic
 #1 = Prediabetic
