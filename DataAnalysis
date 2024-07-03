@@ -1,0 +1,165 @@
+#Install Panda
+!pip install pandas
+!pip install pandas openpyxl
+import pandas as pd
+
+# Reading the Dataset variable description excel file
+df_variables = pd.read_excel('Diabetes Dataset - Variable Context.xlsx')
+df_variables.head()  # Display the first few rows of the DataFrame
+
+#Reading Dataset excel file
+df = pd.read_csv('Diabetes Dataset.csv')
+df.head()
+
+# Calculate statistical measures for each variable
+stats = df.describe().T
+
+stats['median'] = df.median()
+stats['mode'] = df.mode().iloc[0]
+stats['range'] = df.max() - df.min()
+stats['std'] = df.std()
+stats['min'] = df.min()
+stats['max'] = df.max()
+stats['25%'] = df.quantile(0.25)
+stats['50%'] = df.quantile(0.50)
+stats['75%'] = df.quantile(0.75)
+
+instance_count = df.shape[0]
+stats['instances'] = instance_count
+
+print(stats)
+
+#stats.to_csv('basic_statistics.csv', index=True)
+
+#Variable Types: Identify whether each variable is categorical or numerical.
+data_types = df.dtypes
+print(f'Data Types of each \n{data_types}')
+
+# - Missing Values: Check if there are any missing values in the dataset and how prevalent they are across different variables.
+missing_values = df.isnull().sum()
+missing_percentage = (missing_values / len(df)) * 100
+print(f'\nMissing Values & prevalent \n')
+missing_data = pd.DataFrame({'Missing Values': missing_values, 'Percentage': missing_percentage})
+
+print(missing_data)
+
+#- Class Distribution (if applicable): If the dataset includes a target variable indicating diabetes (binary classification, for instance), provide the count or percentage of each class (diabetic vs. Prediabetic. vs non-diabetic).
+class_counts       = df['Diabetes_012'].value_counts()
+class_percentage   = df['Diabetes_012'].value_counts(normalize=True) * 100
+class_distribution = pd.DataFrame({'Count': class_counts, 'Percentage': class_percentage})
+
+# Display the class distribution
+print(class_distribution)
+
+# - Data Range and Outliers: Identify any outliers in numerical variables and determine the range of values they take.
+# Using the interquartile range (IQR) for outliers, which is (Q1 - 1.5 * IQR)
+"""
+The IQR is a measure of statistical dispersion, or how spread out the data is around the median. 
+It is calculated as the difference between the 75th percentile (Q3) and the 25th percentile (Q1) of the data. 
+It is useful for identifying outliers because it focuses on the middle 50% of the data
+Bounds:
+lower = Q1 - 1.5 * IQR
+upper = Q3 + 1.5 * IQR
+"""
+
+
+numerical_cols = df.select_dtypes(include=['int64', 'float64']).columns
+stats = df[numerical_cols].describe().T
+stats['Range'] = stats['max'] - stats['min']
+
+# Interquartile Range (IQR)
+stats['IQR'] = stats['75%'] - stats['25%']
+
+outliers = pd.DataFrame(columns=['Variable', 'Outliers'])
+
+for col in numerical_cols:
+    Q1 = stats.loc[col, '25%']
+    Q3 = stats.loc[col, '75%']
+    IQR = stats.loc[col, 'IQR']
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+    outlier_indices = df[(df[col] < lower_bound) | (df[col] > upper_bound)].index
+    outliers = pd.concat([outliers, pd.DataFrame({'Variable': [col], 'Outliers': [list(outlier_indices)]})], ignore_index=True)
+
+# Display statistics and outliers
+print("Basic Statistics with Range and IQR:")
+print(stats[['min', 'max', 'Range', 'IQR']])
+
+print("\nIdentified Outliers:")
+print(outliers)
+
+#Install seaborn and scikit-learn libraries
+!pip install seaborn
+!pip install scikit-learn
+
+#Answering Research Question No.1:	What are the most significant risk factors for predicting the likelihood of developing diabetes?
+# From the dataset, the first column, “Diabetes_012”, depicts the following:
+#0 = Not diabetic
+#1 = Prediabetic
+#2 = Diabetic
+
+# Import necessary libraries
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report
+from sklearn.feature_selection import chi2
+
+# Load the dataset
+df = pd.read_csv('Diabetes Dataset.csv')
+
+# Display the first few rows of the dataset
+df.head()
+
+# Data Cleaning
+df.dropna(inplace=True)
+
+# Correlation Analysis
+correlation_matrix = df.corr()
+plt.figure(figsize=(12, 8))
+sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm')
+plt.title('Correlation Matrix')
+plt.show()
+
+# Chi-Square Test for categorical variables
+X = df.drop('Diabetes_012', axis=1)
+y = df['Diabetes_012']
+
+# Ensure all features are non-negative for chi-square test
+X = X.abs()
+
+chi_scores = chi2(X, y)
+chi2_df = pd.DataFrame({'Variable': X.columns, 'Chi2_Score': chi_scores[0], 'P_Value': chi_scores[1]})
+chi2_df.sort_values(by='Chi2_Score', ascending=False, inplace=True)
+chi2_df
+
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+# Logistic Regression for Feature Importance
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+log_reg = LogisticRegression(max_iter=5000)  # Increased max_iter
+log_reg.fit(X_train, y_train)
+
+# Logistic Regression Feature Importance
+importance = pd.DataFrame({'Feature': X.columns, 'Importance': log_reg.coef_[0]})
+importance.sort_values(by='Importance', ascending=False, inplace=True)
+
+print("Logistic Regression Feature Importance:")
+display(importance)
+
+# Random Forest for Feature Importance
+rf = RandomForestClassifier(n_estimators=100, random_state=42)
+rf.fit(X_train, y_train)
+rf_importance = pd.DataFrame({'Feature': X.columns, 'Importance': rf.feature_importances_})
+rf_importance.sort_values(by='Importance', ascending=False, inplace=True)
+
+print("Random Forest Feature Importance:")
+display(rf_importance)
+
+# Model Evaluation
+y_pred = rf.predict(X_test)
+print(classification_report(y_test, y_pred))
