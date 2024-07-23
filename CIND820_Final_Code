@@ -1,0 +1,371 @@
+#CIND 820: Final Report Code
+
+!pip install pandas
+!pip install pandas openpyxl
+
+import pandas as pd
+
+# Reading the excel file
+df_variables = pd.read_excel(r'C:\Users\gkirupaharan\Documents\Diabetes Dataset - Variable Context.xlsx')
+                                                          
+df_variables.head()  # Display the first few rows of the DataFrame
+
+df = pd.read_csv(r'C:\Users\gkirupaharan\Documents\Diabetes Dataset.csv')
+df.head()
+
+# - Summary Statistics:
+# Calculate basic statistical measures for each numerical variable
+stats = df.describe().T
+
+stats['median'] = df.median()
+stats['mode'] = df.mode().iloc[0]
+stats['range'] = df.max() - df.min()
+stats['std'] = df.std()
+stats['min'] = df.min()
+stats['max'] = df.max()
+stats['25%'] = df.quantile(0.25)
+stats['50%'] = df.quantile(0.50)
+stats['75%'] = df.quantile(0.75)
+
+instance_count = df.shape[0]
+stats['instances'] = instance_count
+
+print(stats)
+
+#stats.to_csv('basic_statistics.csv', index=True)
+
+#Variable Types: Identify whether each variable is categorical or numerical.
+data_types = df.dtypes
+print(f'Data Types of each \n{data_types}')
+
+# - Missing Values: Check if there are any missing values in the dataset and how prevalent they are across different variables.
+missing_values = df.isnull().sum()
+missing_percentage = (missing_values / len(df)) * 100
+print(f'\nMissing Values & prevalent \n')
+missing_data = pd.DataFrame({'Missing Values': missing_values, 'Percentage': missing_percentage})
+
+print(missing_data)
+
+#- Class Distribution (if applicable): If the dataset includes a target variable indicating diabetes (binary classification, for instance), provide the count or percentage of each class (diabetic vs. Prediabetic. vs non-diabetic).
+
+class_counts       = df['Diabetes_012'].value_counts()
+class_percentage   = df['Diabetes_012'].value_counts(normalize=True) * 100
+class_distribution = pd.DataFrame({'Count': class_counts, 'Percentage': class_percentage})
+
+# Display the class distribution information
+print(class_distribution)
+
+# - Data Range and Outliers: Identify any outliers in numerical variables and determine the range of values they take.
+# Using the interquartile range (IQR) for outliers, which is (Q1 - 1.5 * IQR)
+"""
+The IQR is a measure of statistical dispersion, or how spread out the data is around the median. 
+It is calculated as the difference between the 75th percentile (Q3) and the 25th percentile (Q1) of the data. 
+It is useful for identifying outliers because it focuses on the middle 50% of the data
+Bounds:
+lower = Q1 - 1.5 * IQR
+upper = Q3 + 1.5 * IQR
+"""
+
+
+numerical_cols = df.select_dtypes(include=['int64', 'float64']).columns
+stats = df[numerical_cols].describe().T
+stats['Range'] = stats['max'] - stats['min']
+
+# Interquartile Range (IQR)
+stats['IQR'] = stats['75%'] - stats['25%']
+
+outliers = pd.DataFrame(columns=['Variable', 'Outliers'])
+
+for col in numerical_cols:
+    Q1 = stats.loc[col, '25%']
+    Q3 = stats.loc[col, '75%']
+    IQR = stats.loc[col, 'IQR']
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+    outlier_indices = df[(df[col] < lower_bound) | (df[col] > upper_bound)].index
+    outliers = pd.concat([outliers, pd.DataFrame({'Variable': [col], 'Outliers': [list(outlier_indices)]})], ignore_index=True)
+
+# Display statistics and outliers
+print("Basic Statistics with Range and IQR:")
+print(stats[['min', 'max', 'Range', 'IQR']])
+
+print("\nIdentified Outliers:")
+print(outliers)
+
+!pip install seaborn
+!pip install scikit-learn
+
+# Q1. 	What are the most significant risk factors for predicting the likelihood of developing diabetes?
+# -	From the dataset, the first column, “Diabetes_012”, depicts the following:
+# o	0 = Not diabetic
+# o	1 = Prediabetic
+# o	2 = Diabetic
+
+# Import necessary libraries
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report
+from sklearn.feature_selection import chi2
+
+# Load the dataset
+df = pd.read_csv(r'C:\Users\gkirupaharan\Documents\Diabetes Dataset.csv')
+
+# Display the first few rows of the dataset
+df.head()
+
+# Data Cleaning
+df.dropna(inplace=True)
+
+# Correlation Analysis
+correlation_matrix = df.corr()
+plt.figure(figsize=(25, 20))
+sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm')
+plt.title('Correlation Matrix')
+plt.show()
+
+# Chi-Square Test for categorical variables
+X = df.drop('Diabetes_012', axis=1)
+y = df['Diabetes_012']
+
+# Ensure all features are non-negative for chi-square test
+X = X.abs()
+
+chi_scores = chi2(X, y)
+chi2_df = pd.DataFrame({'Variable': X.columns, 'Chi2_Score': chi_scores[0], 'P_Value': chi_scores[1]})
+chi2_df.sort_values(by='Chi2_Score', ascending=False, inplace=True)
+chi2_df
+
+from sklearn.preprocessing import StandardScaler
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+# Logistic Regression for Feature Importance
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+log_reg = LogisticRegression(max_iter=5000)  # Increased max_iter
+log_reg.fit(X_train, y_train)
+
+# Logistic Regression Feature Importance
+importance = pd.DataFrame({'Feature': X.columns, 'Importance': log_reg.coef_[0]})
+importance.sort_values(by='Importance', ascending=False, inplace=True)
+
+print("Logistic Regression Feature Importance:")
+display(importance)
+
+# Random Forest for Feature Importance
+rf = RandomForestClassifier(n_estimators=100, random_state=42)
+rf.fit(X_train, y_train)
+rf_importance = pd.DataFrame({'Feature': X.columns, 'Importance': rf.feature_importances_})
+rf_importance.sort_values(by='Importance', ascending=False, inplace=True)
+
+print("Random Forest Feature Importance:")
+display(rf_importance)
+
+# Model Evaluation
+y_pred = rf.predict(X_test)
+print(classification_report(y_test, y_pred))
+
+import matplotlib.pyplot as plt
+
+df.dropna(subset=['Age', 'Diabetes_012'], inplace=True)
+
+# Summarize Age Distribution
+age_summary = df['Age'].describe()
+print("Age Summary:\n", age_summary)
+
+# Plot Age Distribution
+plt.figure(figsize=(10, 6))
+sns.histplot(df['Age'], bins=30, kde=True)
+plt.title('Age Distribution')
+plt.xlabel('Age')
+plt.ylabel('Frequency')
+plt.show()
+
+# Plot Age Distribution
+plt.figure(figsize=(10, 6))
+sns.histplot(df['Age'], bins=30, kde=True)
+plt.title('Age Distribution')
+plt.xlabel('Age')
+plt.ylabel('Frequency')
+plt.show()
+
+# Plot Age vs. Diabetes Diagnosis
+plt.figure(figsize=(12, 8))
+sns.boxplot(x='Diabetes_012', y='Age', data=df)
+plt.title('Age vs. Diabetes Diagnosis')
+plt.xlabel('Diabetes Diagnosis (0=Not Diabetic, 1=Prediabetic, 2=Diabetic)')
+plt.ylabel('Age')
+plt.show()
+
+# Define Age Categories
+age_bins = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+age_labels = ['18-24', '25-29', '30-34', '35-39', '40-44', '45-49', '50-54', '55-59', '60-64', '65-69', '70-74', '75-79', '80 or Older']
+df['Age_Group'] = pd.cut(df['Age'], bins=age_bins, labels=age_labels, right=True)
+
+# Correlation Analysis
+age_group_corr = df.groupby('Age_Group')['Diabetes_012'].mean()
+print("Age Group Correlation with Diabetes:\n", age_group_corr)
+
+# Visualize Age Group vs. Diabetes Diagnosis
+plt.figure(figsize=(12, 8))
+sns.barplot(x=age_group_corr.index, y=age_group_corr.values)
+plt.title('Age Group vs. Diabetes Diagnosis')
+plt.xlabel('Age Group')
+plt.ylabel('Average Diabetes Diagnosis')
+plt.xticks(rotation=45)
+plt.show()
+
+# Build and Evaluate Model
+X = df[['Age']]
+y = df['Diabetes_012']
+
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+log_reg = LogisticRegression(max_iter=1000)
+log_reg.fit(X_train, y_train)
+
+# Logistic Regression Coefficients
+age_importance = log_reg.coef_[0][0]
+print(f'Logistic Regression Coefficient for Age: {age_importance}')
+
+# Identify Top Age Groups
+age_group_ranking = age_group_corr.sort_values(ascending=False)
+print("Age Groups Ranked by Diabetes Diagnosis Correlation:\n", age_group_ranking)
+
+# Q4
+# What are the most effective interventions for preventing or managing diabetes based on an analysis of the dataset?
+# -	For the patients with ‘Diabetes_012’ = 0 , which age group do they belong to, and which variables correlate strongly to them not being diagnosed with diabetes ?
+
+import matplotlib.pyplot as plt
+
+non_diabetic_df = df[df['Diabetes_012'] == 0]
+print("Shape of non-diabetic dataset:", non_diabetic_df.shape)
+summary_non_diabetic = non_diabetic_df.describe()
+print("Summary statistics for non-diabetic patients:\n", summary_non_diabetic)
+
+# Correlation Analysis for Non-Diabetic Patients
+correlation_non_diabetic = non_diabetic_df.corr()
+non_diabetic_corr_with_diabetes = correlation_non_diabetic['Diabetes_012'].drop('Diabetes_012').sort_values()
+print("Correlation of Variables with Non-Diabetes:\n", non_diabetic_corr_with_diabetes)
+
+# Visualize Correlation of Variables with Non-Diabetes
+# plt.figure(figsize=(12, 8))
+# non_diabetic_corr_with_diabetes.plot(kind='bar')
+# plt.title('Correlation of Variables with Non-Diabetes')
+# plt.xlabel('Variables')
+# plt.ylabel('Correlation Coefficient')
+# plt.show()
+
+# Aggregating Age into Groups for Analysis
+age_bins = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+age_labels = ['18-24', '25-29', '30-34', '35-39', '40-44', '45-49', '50-54', '55-59', '60-64', '65-69', '70-74', '75-79', '80 or Older']
+non_diabetic_df['Age_Group'] = pd.cut(non_diabetic_df['Age'], bins=age_bins, labels=age_labels)
+
+age_group_count_non_diabetic = non_diabetic_df['Age_Group'].value_counts().sort_index()
+print("Count of Non-Diabetic Patients by Age Group:\n", age_group_count_non_diabetic)
+
+plt.figure(figsize=(12, 8))
+age_group_count_non_diabetic.plot(kind='bar')
+plt.title('Count of Non-Diabetic Patients by Age Group')
+plt.xlabel('Age Group')
+plt.ylabel('Count')
+plt.show()
+
+variables_to_analyze = ['HighBP', 'HighChol', 'CholCheck', 'BMI', 'Smoker', 'Stroke', 
+                        'HeartDiseaseorAttack', 'PhysActivity', 'Fruits', 'Veggies', 
+                        'HvyAlcoholConsump', 'AnyHealthcare', 'NoDocbcCost', 'GenHlth', 
+                        'MentHlth', 'PhysHlth', 'DiffWalk', 'Sex', 'Education', 'Income']
+
+for var in variables_to_analyze:
+    plt.figure(figsize=(10, 6))
+    sns.histplot(non_diabetic_df[var], kde=True)
+    plt.title(f'Distribution of {var} for Non-Diabetic Patients')
+    plt.xlabel(var)
+    plt.ylabel('Frequency')
+    plt.show()
+
+from sklearn.feature_selection import chi2
+
+X = non_diabetic_df.drop(['Diabetes_012', 'Age_Group'], axis=1)
+y = non_diabetic_df['Diabetes_012']
+chi_scores = chi2(X, y)
+chi2_df = pd.DataFrame({'Variable': X.columns, 'Chi2_Score': chi_scores[0], 'P_Value': chi_scores[1]})
+chi2_df.sort_values(by='Chi2_Score', ascending=False, inplace=True)
+print("Chi-Square Test Results:\n", chi2_df)
+print("Top factors associated with non-diabetes:\n", chi2_df.head())
+
+
+# Q4: How the following risk factors play a role in diabetes: Smokers/Alcohol Consumers or Physical/Mental Health 
+# Which of the following variables strongly correlate to being diagnosed with diabetes:
+# Smoker = 1, HvyAlcoholConsump =1, PhyysActivity = 0, PhysHlth = 7 and over, GenHlth = 4 to 5, MentHlth = 7 and over
+
+import matplotlib.pyplot as plt
+# Filter the dataset for specific conditions
+filtered_df = df[
+    (df['Smoker'] == 1) | 
+    (df['HvyAlcoholConsump'] == 1) | 
+    (df['PhysActivity'] == 0) | 
+    (df['PhysHlth'] >= 7) | 
+    (df['GenHlth'].between(4, 5)) | 
+    (df['MentHlth'] >= 7)
+]
+
+print("Shape of the filtered dataset:", filtered_df.shape)
+
+selected_variables = ['Smoker', 'HvyAlcoholConsump', 'PhysActivity', 'PhysHlth', 'GenHlth', 'MentHlth']
+correlations = filtered_df[selected_variables + ['Diabetes_012']].corr()['Diabetes_012'].drop('Diabetes_012')
+print("Correlations with Diabetes_012:\n", correlations)
+
+# Visualize correlations
+plt.figure(figsize=(10, 6))
+correlations.plot(kind='bar')
+plt.title('Correlation of Specified Risk Factors with Diabetes_012')
+plt.xlabel('Risk Factors')
+plt.ylabel('Correlation Coefficient')
+plt.show()
+
+for var in selected_variables:
+    plt.figure(figsize=(10, 6))
+    sns.histplot(data=filtered_df, x=var, hue='Diabetes_012', multiple='stack', kde=True)
+    plt.title(f'Distribution of {var} for Diabetic and Non-Diabetic Patients')
+    plt.xlabel(var)
+    plt.ylabel('Frequency')
+    plt.show()
+
+# Summary of distributions for diabetic vs non-diabetic
+summary = filtered_df.groupby('Diabetes_012')[selected_variables].describe()
+print("Summary statistics for specified variables:\n", summary)
+
+#Q5 How does comorbidities, such as obesity, hypertension, and cardiovascular diseases, correlate with diabetes prevalence and outcomes?
+
+import matplotlib.pyplot as plt
+# Define the comorbidities
+comorbidities = ['BMI', 'HighBP', 'HeartDiseaseorAttack']
+correlations = df[comorbidities + ['Diabetes_012']].corr()['Diabetes_012'].drop('Diabetes_012')
+print("Correlations with Diabetes_012:\n", correlations)
+
+# Visualize correlations
+plt.figure(figsize=(10, 6))
+correlations.plot(kind='bar')
+plt.title('Correlation of Comorbidities with Diabetes_012')
+plt.xlabel('Comorbidities')
+plt.ylabel('Correlation Coefficient')
+plt.show()
+
+for comorbidity in comorbidities:
+    plt.figure(figsize=(10, 6))
+    sns.histplot(data=df, x=comorbidity, hue='Diabetes_012', multiple='stack', kde=True)
+    plt.title(f'Distribution of {comorbidity} for Diabetic and Non-Diabetic Patients')
+    plt.xlabel(comorbidity)
+    plt.ylabel('Frequency')
+    plt.show()
+
+summary = df.groupby('Diabetes_012')[comorbidities].describe()
+print("Summary statistics for comorbidities:\n", summary)
+
